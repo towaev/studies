@@ -1,3 +1,13 @@
+/*TCP multithreaded client (windows)
+Created by Eugene Vorobej (gr.435013) as an university project project
+
+To disconnect specific user type ":k userId"
+(e.g. type  ":k 1"
+to disconnect user with ID 1
+
+To properly close server type ":q"
+*/
+
 #include <cstdio>  
 #include <winsock2.h>
 #include <ws2tcpip.h>
@@ -40,29 +50,38 @@ HANDLE* killAll() {
 		if (peers[i] != NULL) {
 			handlePeers.push_back(peers[i]->handle);
 			shutdown(peers[i]->socket, SD_BOTH);
-			closesocket(peers[i]->socket);
+			closesocket(peers[i]->socket);			
 			delete peers[i];
+			peers[i] = NULL;
 			peerCount--;
-			WaitForSingleObject(peers[i]->handle, INFINITE);
-			break;			
+			//WaitForSingleObject(peers[i]->handle, INFINITE);
+			//break;			
 		}
+		
 	}
 	ReleaseMutex(thMutex);
-	return &handlePeers[0];
+	if (handlePeers.size() > 0)
+		return &handlePeers[0];
+	else return NULL;
 }
 void killPeerID(size_t id) {
 	WaitForSingleObject(thMutex, INFINITE);
+	bool peerExists = false;
 	for (size_t i = 0; i < peerMaxCount; i++) {
-		if (peers[i] != NULL && peers[i]->id == id) {			
+		if (peers[i] != NULL && peers[i]->id == id) {
+			peerExists = true;
 			shutdown(peers[i]->socket, SD_BOTH);
 			closesocket(peers[i]->socket);
 			WaitForSingleObject(peers[i]->handle, INFINITE);
 			delete peers[i];
-			peerCount--;			
+			peers[i] = NULL;
+			peerCount--;
+			cout << "Peer " << id << " is disconnected from server" << endl;
 			break;
 		}
 	}
-	cout << "Peer " << id << " is disconnected from server" << endl;
+	if (!peerExists) 
+		cout << "There is no such peer" << endl;
 	ReleaseMutex(thMutex);
 }
 
@@ -176,12 +195,10 @@ DWORD WINAPI acceptThread(LPVOID tempSocket) {
 	}
 
 	HANDLE *handles = killAll();
-
-	
-	if (handles != NULL) {
-		//waiting for threads 
-		WaitForMultipleObjects(sizeof(handles) / sizeof(HANDLE), handles, TRUE, INFINITE);
-	}
+	//waiting for threads 
+	if (handles != NULL) {		
+		WaitForMultipleObjects(sizeof(handles) / sizeof(HANDLE), handles, TRUE, INFINITE);		
+	}	
 	return 0;
 }
 
@@ -230,9 +247,9 @@ int main() {
 	string inpL;
 	while (true) {
 		getline(cin, inpL);
-		if (inpL.compare(":q") == 0) {				
-			char recvbuf[BUFLEN];
-			int recvbuflen = BUFLEN;
+		if (inpL.compare(":q") == 0) {
+
+			
 			shutdown(lstSocket, SD_BOTH);		
 			closesocket(lstSocket);
 			break;
