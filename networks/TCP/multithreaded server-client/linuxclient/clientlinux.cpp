@@ -7,8 +7,7 @@
 
 using namespace std;
 
-#define BUFLEN 100 
-typedef uint16_t data_t;
+#define BUFLEN 300
 
 void error(const char *errMsg, int *socket) {
     cout << errMsg << endl;
@@ -18,14 +17,15 @@ void error(const char *errMsg, int *socket) {
 	exit(1);
 }
 
-void sendNew(int *socket, char *data, data_t bufLen) {
-    data_t status = 0;
-    data_t sendMsg = bufLen;
-    char buf[bufLen];
+void sendNew(int *socket, char *data, size_t bufLen) {
+    size_t status = 0;
+    size_t sendMsg = bufLen+1;
+    char *buf = new char[bufLen+1];
+	strcpy(buf, data);
     do {
-        status = send(*socket, data, sendMsg, 0);
+        status = send(*socket, buf, sendMsg, 0);
         if(status > 0) {
-            for(data_t i = 0; i < bufLen; ++i) {
+            for(size_t i = 0; i < bufLen; ++i) {
                 if(i < status) {
                     buf[i] = data[i];
                 } else {
@@ -37,22 +37,22 @@ void sendNew(int *socket, char *data, data_t bufLen) {
             if(sendMsg != 0) {
                 buf[status] = '\0';
             }
-            cout << ">> " << buf << endl;
+         //   cout << ">> " << buf << endl;
         } else {
-			error("Couldn't send message:\n", socket);
+		error("Couldn't send message:\n", socket);
         }
     } while(sendMsg > 0);
 }
 
-int readNew(int *socket, char *data, data_t bufLen) {
-    data_t rc = 0;
-    data_t length = 0;
-    char buf[bufLen];
+int readNew(int *socket, char *data, size_t bufLen) {
+    size_t rc = 0;
+    size_t length = 0;
+    char *buf = new char[bufLen + 1];
 
     while(length < bufLen) {
-        rc = recv(*socket, buf, bufLen - length, 0);
+        rc = (size_t)recv(*socket, buf, bufLen - length, 0);
         if(rc > 0) {
-            for(data_t i = length; i < length + rc; i++) {
+            for(size_t i = length; i < length + rc; i++) {
                 data[i] = buf[i-length];
             }
             length += rc;
@@ -60,20 +60,27 @@ int readNew(int *socket, char *data, data_t bufLen) {
                 buf[rc] = '\0';
             }
             cout << "<< " << buf << endl;
+		delete []buf;
+   	 return length;
         } else if(rc == 0) {
             cout << "Connection ended" << endl;
+		delete []buf;
             return 0;
         } else {
             error("Couldn't recive data. Recv error:\n", socket);
         }
     }
-    return length;
+	delete []buf;
 }
 
 
 
-int main() {
+int main(int argc, char *argv[]) {
     int connectSocket = SOCK_CLOEXEC;
+	if (argc < 2) {
+		cout <<"Usage: "<< argv[0] <<"host port msg...\n";
+		exit(EXIT_FAILURE);
+	}
 
     struct addrinfo hints;
     struct addrinfo *serverInfo;
@@ -82,8 +89,8 @@ int main() {
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_protocol = IPPROTO_TCP;
-    const char *node ="192.168.56.1";
-    const char *port ="7500"; 
+    const char *node =argv[1];
+    const char *port =argv[2]; 
     cout << "Starting up client" << endl;
     int iResult = getaddrinfo(node, port, &hints, &serverInfo);
     if(iResult < 0) {
@@ -127,23 +134,32 @@ int main() {
     cout << "Input data" << endl;
     do {
         getline(cin, inputLine);
-        if(inputLine.compare("quit") == 0) {
-            break;
-        }
-        if(inputLine.length() >= BUFLEN) {
+       /* if(inputLine.length() >= BUFLEN) {
             inputLine = inputLine.substr(0, BUFLEN);
             strcpy(data, inputLine.c_str());
         } else {
             strcpy(data, inputLine.c_str());
-            for(data_t i = (data_t) inputLine.length(); i < BUFLEN; ++i) {
+            for(size_t i = (size_t) inputLine.length(); i < BUFLEN; ++i) {
+                data[i] = '\0';
+            }
+        }*/
+	if(inputLine.length() < BUFLEN) {          
+            strcpy(data, inputLine.c_str());
+            for(size_t i = (size_t) inputLine.length(); i < BUFLEN; ++i) {
                 data[i] = '\0';
             }
         }
-
-
-        sendNew(&connectSocket, data, BUFLEN);
-
-        iResult = readNew(&connectSocket, data, BUFLEN);
+	if (inputLine.compare(":dc ") == 0) {
+            sendNew(&connectSocket, data, BUFLEN);
+            int dcResult = readNew(&connectSocket, data, BUFLEN);
+	    if (dcResult > 0)
+		cout << "Succesfull disconnect" << endl;
+		break;
+        }
+	else{
+		sendNew(&connectSocket, data, strlen(data));
+		iResult = readNew(&connectSocket, data, BUFLEN);
+	}
     } while(iResult > 0);
 
     close(connectSocket);
